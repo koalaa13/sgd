@@ -1,18 +1,31 @@
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-
-
-# import plotly.graph_objects as go
-# import plotly.express as px
-# import time
-# from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 
 
 # plt.rcParams["figure.figsize"] = (20, 10)
-# random.seed(1)
+random.seed(1)
 
-def gradient_descent(gradient_func, start_point, iterations, eps):
+
+class CommonGradientDescent:
+    def __init__(self, regression, points, n, error_func, step, mu=None, beta1=None, beta2=None):
+        self.regression = regression
+        self.points = points
+        self.n = n
+        self.error_func = error_func
+        self.step = step
+        if mu:
+            self.mu = mu
+        if beta1:
+            self.beta1 = beta1
+        if beta2:
+            self.beta2 = beta2
+
+
+def gradient_descent(gradient_func: CommonGradientDescent, start_point, iterations, eps):
     current_point = start_point
     points = [current_point]
     for it in range(iterations):
@@ -38,21 +51,6 @@ class MeanSquaredError:
         for p in points:
             res -= 2 * (p[1] - regression.function(state, p[0])) * regression.gradient(p[0])
         return res / len(points)
-
-
-class CommonGradientDescent:
-    def __init__(self, regression, points, n, error_func, step, mu=None, beta1=None, beta2=None):
-        self.regression = regression
-        self.points = points
-        self.n = n
-        self.error_func = error_func
-        self.step = step
-        if mu:
-            self.mu = mu
-        if beta1:
-            self.beta1 = beta1
-        if beta2:
-            self.beta2 = beta2
 
 
 class StandartGradient(CommonGradientDescent):
@@ -177,30 +175,6 @@ def f(xs):
     return result
 
 
-def check():
-    regression = LinearRegression()
-    error_func = MeanSquaredError()
-    step = 1e-4
-    eps = 1e-5
-    train_points = generate_points(f, 50, 100)
-    iterations = 1000
-
-    ps = gradient_descent(
-        gradient_func=StandartGradient(
-            regression=regression,
-            points=train_points,
-            n=len(train_points),
-            error_func=error_func,
-            step=step
-        ),
-        start_point=np.array([0.0] * (len(train_points[0][0]) + 1)),
-        iterations=iterations,
-        eps=eps
-    )[0]
-    plt.plot(range(len(ps)), [error_func.function(regression, train_points, x) for x in ps])
-    plt.savefig('check.png')
-
-
 def task1():
     regression = LinearRegression()
     error_func = MeanSquaredError()
@@ -254,7 +228,6 @@ def scale_points(points, dimension_size):
 def task2():
     regression = LinearRegression()
     error_func = MeanSquaredError()
-    step = 1e-4
     eps = 1e-1
     number_of_points = 100
     dimension_size = 40
@@ -262,29 +235,231 @@ def task2():
     scaled_points = scale_points(train_points, dimension_size)
 
     batch_sizes = range(1, number_of_points + 1, 2)
-    iterations = []
-    for batch_size in batch_sizes:
-        iterations.append(gradient_descent(
-            gradient_func=StandartGradient(
+    plt.xlabel('Batch Size')
+    plt.ylabel('Needed iterations to reach ok quality')
+    steps = [5e-2, 1e-4]
+    legend = []
+
+    for step in steps:
+        scaled_iterations = []
+        iterations = []
+        for batch_size in batch_sizes:
+            trajectory, its = gradient_descent(
+                gradient_func=StandartGradient(
+                    regression=regression,
+                    points=scaled_points,
+                    n=batch_size,
+                    error_func=error_func,
+                    step=step
+                ),
+                start_point=np.array([0.0] * (len(train_points[0][0]) + 1)),
+                iterations=1000,
+                eps=eps
+            )
+            scaled_iterations.append(its)
+            trajectory, its = gradient_descent(
+                gradient_func=StandartGradient(
+                    regression=regression,
+                    points=train_points,
+                    n=batch_size,
+                    error_func=error_func,
+                    step=step
+                ),
+                start_point=np.array([0.0] * (len(train_points[0][0]) + 1)),
+                iterations=1000,
+                eps=eps
+            )
+            iterations.append(its)
+            print("batch_size" + str(batch_size) + "finished with step = " + str(step))
+        legend.append(plt.plot(batch_sizes, iterations, label='SGD with step = ' + str(step))[0])
+        legend.append(plt.plot(batch_sizes, scaled_iterations, label='Scaled SGD with step = ' + str(step))[0])
+    plt.suptitle('Task2')
+    plt.legend(handles=legend)
+    plt.savefig('task2.png')
+
+
+def draw_iterations_to_error_graphics():
+    regression = LinearRegression()
+    error_func = MeanSquaredError()
+    eps = 1e-1
+    number_of_points = 100
+    dimension_size = 40
+    step = 5e-2
+    train_points = generate_points(f, dimension_size, number_of_points)
+    batch_size = 50
+
+    trajectory, its = gradient_descent(
+        gradient_func=StandartGradient(
+            regression=regression,
+            points=train_points,
+            n=batch_size,
+            error_func=error_func,
+            step=step
+        ),
+        start_point=np.array([0.0] * (len(train_points[0][0]) + 1)),
+        iterations=1000,
+        eps=eps
+    )
+    plt.plot(range(len(trajectory)), [error_func.function(regression, train_points, x) for x in trajectory])
+    plt.xlabel('Iterations')
+    plt.ylabel('Error')
+    plt.savefig('check.png')
+
+
+def task3():
+    number_of_points = 100
+    dimension_size = 40
+    train_points = generate_points(f, dimension_size, number_of_points)
+    train_points = scale_points(train_points, dimension_size)
+    methods = {
+        "GD": StandartGradient,
+        "SGD": StandartGradient,
+        "Momentum": MomentumGradient,
+        "Nesterov": NesterovGradient,
+        "AdaGrad": AdagradGradient,
+        "RMSProp": RMSPropGradient,
+        "Adam": AdamGradient
+    }
+    plots = []
+    for label, gradient in methods.items():
+        regression = LinearRegression()
+        error_func = MeanSquaredError()
+
+        n = len(train_points) // 10
+        eps = 1e-2
+        step = 1e-2
+        mu = 0.9
+        beta1 = 0.9
+        beta2 = 0.999
+
+        if label == "GD":
+            n = len(train_points)
+        if label == "SGD":
+            pass
+        if label == "Momentum":
+            pass
+        if label == "Nesterov":
+            step = 1e-3
+        if label == "AdaGrad":
+            step = 50
+        if label == "RMSProp":
+            step = 10
+        if label == "Adam":
+            step = 10
+
+        start_time = time.time()
+        trajectory = gradient_descent(
+            gradient_func=gradient(
                 regression=regression,
-                points=scaled_points,
-                n=batch_size,
+                points=train_points,
+                n=n,
                 error_func=error_func,
-                step=step
+                step=step,
+                mu=mu,
+                beta1=beta1,
+                beta2=beta2,
+            ),
+            start_point=np.array([0.0] * (len(train_points[0][0]) + 1)),
+            iterations=500,
+            eps=eps
+        )[0][1:]
+
+        print(label)
+        print(f'function calls: {regression.function_calls}')
+        print(f'gradient calls: {regression.gradient_calls}')
+        print(f'seconds: {time.time() - start_time}')
+        plots.append(
+            plt.plot(range(len(trajectory)), [error_func.function(regression, train_points, x) for x in trajectory],
+                     label=label)[0])
+
+    plt.suptitle('Task3-4')
+    plt.xlabel('Iterations')
+    plt.ylabel('Error')
+    plt.legend(handles=plots)
+    plt.savefig('task3-4.png')
+
+def task5():
+    number_of_points = 100
+    dimension_size = 1
+
+    fig = make_subplots(rows=7, cols=1,
+                        subplot_titles=("GD", "SGD", "Momentum", "Nesterov", "AdaGrad", "RMSProp", "Adam"))
+    methods = {
+        "GD": StandartGradient,
+        "SGD": StandartGradient,
+        "Momentum": MomentumGradient,
+        "Nesterov": NesterovGradient,
+        "AdaGrad": AdagradGradient,
+        "RMSProp": RMSPropGradient,
+        "Adam": AdamGradient
+    }
+
+    error_func = MeanSquaredError()
+    regression = LinearRegression()
+
+    def g(xs):
+        return 10 - 4 * xs[0]
+
+    train_points = generate_points(g, dimension_size, number_of_points)
+
+    xs = list(range(-2, 12))
+    ys = list(range(-10, 2))
+    zs = []
+    for y in ys:
+        layer = []
+        for x in xs:
+            layer.append(error_func.function(regression, train_points, [x, y]))
+        zs.append(layer)
+
+    row = 0
+    for label, gradient in methods.items():
+        row += 1
+
+        n = len(train_points) // 20
+        eps = 1e-5
+        step = 1e-3
+        mu = 0.9
+        beta1 = 0.9
+        beta2 = 0.999
+
+        if label == "GD":
+            n = len(train_points)
+        if label == "SGD":
+            pass
+        if label == "Momentum":
+            pass
+        if label == "Nesterov":
+            step = 3e-4
+            mu = 0.85
+        if label == "AdaGrad":
+            step = 2
+        if label == "RMSProp":
+            step = 2e-1
+        if label == "Adam":
+            step = 2e-1
+
+        trajectory = gradient_descent(
+            gradient_func=gradient(
+                regression=regression,
+                points=train_points,
+                n=n,
+                error_func=error_func,
+                step=step,
+                mu=mu,
+                beta1=beta1,
+                beta2=beta2,
             ),
             start_point=np.array([0.0] * (len(train_points[0][0]) + 1)),
             iterations=1000,
             eps=eps
-        )[1])
-    plt.title('Scaled SGD')
-    plt.xlabel('Batch Size')
-    plt.ylabel('Needed iterations to reach ok quality')
-    plt.plot(batch_sizes, iterations)
-    plt.savefig('task2.png')
+        )[0]
 
+        fig.add_trace(go.Contour(x=xs, y=ys, z=zs), row=row, col=1)
+        fig.add_trace(go.Scatter(x=[p[0] for p in trajectory], y=[p[1] for p in trajectory], mode='lines',
+                                 line=dict(color='lightgreen')), row=row, col=1)
 
-task2()
-# data = [[-1, 2], [-0.5, 6], [0, 10], [1, 18]]
-# scaler = MinMaxScaler()
-# scaler.fit(data)
-# data = scaler.transform(data)
+    fig.update_layout(height=3000, width=1400)
+    fig.write_image('task5.png')
+
+# check()
+task5()
